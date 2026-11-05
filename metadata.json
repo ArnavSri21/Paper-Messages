@@ -1,0 +1,6 @@
+{
+  "name": "PaperMessages",
+  "description": "Next-generation private messaging, threaded group discussions, and communities with a Liquid Glass design system.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

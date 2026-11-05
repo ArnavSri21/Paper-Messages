@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">PaperMessages</string>
+    <string name="tagline">Your conversations, reimagined.</string>
+    <string name="philosophy_quote">Conversations deserve more than a message feed. They deserve structure, space and clarity.</string>
+    <string name="search_placeholder">Search messages, people and conversations...</string>
+    <string name="sign_in_with_google">Sign in with Google</string>
+    <string name="nav_chats">Chats</string>
+    <string name="nav_communities">Communities</string>
+    <string name="nav_calls">Calls</string>
+    <string name="nav_profile">Profile</string>
+</resources>

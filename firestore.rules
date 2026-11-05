@@ -1,0 +1,489 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 1: Global Default-Deny Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Primitive Hardened Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function hasValidTimestampsOnCreate(data) {
+      return data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function hasValidTimestampsOnUpdate(data, oldData) {
+      return data.createdAt == oldData.createdAt &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // 1. UserProfile Validation Blueprint
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll([
+               'userId', 'displayName', 'username', 'phoneNumber', 'countryCode', 'bio',
+               'avatarColor', 'publicKeyBase64', 'keyFingerprint', 'deviceName',
+               'onboardingCompleted', 'online', 'privacyOnline', 'privacyLastSeen',
+               'privacyReadReceipts', 'privacyPhoneLookup', 'reducedMotion', 'blockedUsersCsv',
+               'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'userId', 'displayName', 'username', 'phoneNumber', 'countryCode', 'bio',
+               'avatarColor', 'publicKeyBase64', 'keyFingerprint', 'deviceName',
+               'onboardingCompleted', 'online', 'privacyOnline', 'privacyLastSeen',
+               'privacyReadReceipts', 'privacyPhoneLookup', 'reducedMotion', 'blockedUsersCsv',
+               'createdAt', 'updatedAt'
+             ]) &&
+             data.userId is string && data.userId == userId && data.userId == request.auth.uid &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+             data.username is string && data.username.size() >= 3 && data.username.size() <= 32 &&
+             data.phoneNumber is string && data.phoneNumber.size() <= 24 &&
+             data.countryCode is string && data.countryCode.size() >= 1 && data.countryCode.size() <= 8 &&
+             data.bio is string && data.bio.size() <= 240 &&
+             data.avatarColor is string && data.avatarColor.size() >= 4 && data.avatarColor.size() <= 16 &&
+             data.publicKeyBase64 is string && data.publicKeyBase64.size() <= 512 &&
+             data.keyFingerprint is string && data.keyFingerprint.size() <= 128 &&
+             data.deviceName is string && data.deviceName.size() >= 1 && data.deviceName.size() <= 64 &&
+             data.onboardingCompleted is bool &&
+             data.online is bool &&
+             data.privacyOnline is string && data.privacyOnline in ['EVERYONE', 'CONTACTS', 'NOBODY'] &&
+             data.privacyLastSeen is string && data.privacyLastSeen in ['EVERYONE', 'CONTACTS', 'NOBODY'] &&
+             data.privacyReadReceipts is bool &&
+             data.privacyPhoneLookup is string && data.privacyPhoneLookup in ['EVERYONE', 'CONTACTS', 'NOBODY'] &&
+             data.reducedMotion is bool &&
+             data.blockedUsersCsv is string && data.blockedUsersCsv.size() <= 1000;
+    }
+
+    // 2. ConversationItem Validation Blueprint
+    function isValidConversationItem(data, userId) {
+      return data.keys().hasAll([
+               'userId', 'title', 'subtitle', 'type', 'encryptionMode', 'memberCount',
+               'onlineCount', 'lastMessagePreview', 'lastMessageSender', 'unreadCount',
+               'pinned', 'muted', 'archived', 'topicsCsv', 'resourcesCsv', 'inviteCode',
+               'avatarColor', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'userId', 'title', 'subtitle', 'type', 'encryptionMode', 'memberCount',
+               'onlineCount', 'lastMessagePreview', 'lastMessageSender', 'unreadCount',
+               'pinned', 'muted', 'archived', 'topicsCsv', 'resourcesCsv', 'inviteCode',
+               'avatarColor', 'createdAt', 'updatedAt'
+             ]) &&
+             data.userId is string && data.userId == userId && data.userId == request.auth.uid &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
+             data.subtitle is string && data.subtitle.size() <= 160 &&
+             data.type is string && data.type in ['PRIVATE', 'GROUP'] &&
+             data.encryptionMode is string && data.encryptionMode in ['E2EE_SIGNAL', 'E2EE_MLS', 'TRANSPORT_TLS'] &&
+             data.memberCount is int && data.memberCount >= 1 &&
+             data.onlineCount is int && data.onlineCount >= 0 &&
+             data.lastMessagePreview is string && data.lastMessagePreview.size() <= 300 &&
+             data.lastMessageSender is string && data.lastMessageSender.size() <= 80 &&
+             data.unreadCount is int && data.unreadCount >= 0 &&
+             data.pinned is bool &&
+             data.muted is bool &&
+             data.archived is bool &&
+             data.topicsCsv is string && data.topicsCsv.size() <= 300 &&
+             data.resourcesCsv is string && data.resourcesCsv.size() <= 1500 &&
+             data.inviteCode is string && data.inviteCode.size() <= 40 &&
+             data.avatarColor is string && data.avatarColor.size() >= 4 && data.avatarColor.size() <= 16;
+    }
+
+    // 3. ChatMessage Validation Blueprint
+    function isValidChatMessage(data, userId, conversationId) {
+      return data.keys().hasAll([
+               'userId', 'conversationId', 'senderId', 'senderName', 'senderRole', 'topic',
+               'content', 'cipherText', 'ivBase64', 'attachmentType', 'attachmentName',
+               'attachmentMeta', 'replyCount', 'lastReplyPreview', 'lastReplySender',
+               'followingThread', 'threadMuted', 'unreadReplyCount', 'reactionsSummary',
+               'readCount', 'readersCsv', 'pinned', 'edited', 'deleted', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'userId', 'conversationId', 'senderId', 'senderName', 'senderRole', 'topic',
+               'content', 'cipherText', 'ivBase64', 'attachmentType', 'attachmentName',
+               'attachmentMeta', 'replyCount', 'lastReplyPreview', 'lastReplySender',
+               'followingThread', 'threadMuted', 'unreadReplyCount', 'reactionsSummary',
+               'readCount', 'readersCsv', 'pinned', 'edited', 'deleted', 'createdAt', 'updatedAt'
+             ]) &&
+             data.userId is string && data.userId == userId && data.userId == request.auth.uid &&
+             data.conversationId is string && data.conversationId == conversationId &&
+             data.senderId is string && data.senderId.size() >= 1 && data.senderId.size() <= 128 &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 80 &&
+             data.senderRole is string && data.senderRole.size() <= 32 &&
+             data.topic is string && data.topic.size() >= 1 && data.topic.size() <= 48 &&
+             data.content is string && data.content.size() <= 2000 &&
+             data.cipherText is string && data.cipherText.size() <= 4000 &&
+             data.ivBase64 is string && data.ivBase64.size() <= 128 &&
+             data.attachmentType is string && data.attachmentType in ['NONE', 'IMAGE', 'VIDEO', 'DOCUMENT', 'VOICE', 'POLL'] &&
+             data.attachmentName is string && data.attachmentName.size() <= 255 &&
+             data.attachmentMeta is string && data.attachmentMeta.size() <= 1000 &&
+             data.replyCount is int && data.replyCount >= 0 &&
+             data.lastReplyPreview is string && data.lastReplyPreview.size() <= 300 &&
+             data.lastReplySender is string && data.lastReplySender.size() <= 80 &&
+             data.followingThread is bool &&
+             data.threadMuted is bool &&
+             data.unreadReplyCount is int && data.unreadReplyCount >= 0 &&
+             data.reactionsSummary is string && data.reactionsSummary.size() <= 500 &&
+             data.readCount is int && data.readCount >= 0 &&
+             data.readersCsv is string && data.readersCsv.size() <= 500 &&
+             data.pinned is bool &&
+             data.edited is bool &&
+             data.deleted is bool;
+    }
+
+    // 4. ThreadReplyItem Validation Blueprint
+    function isValidThreadReplyItem(data, userId, conversationId, messageId) {
+      return data.keys().hasAll([
+               'userId', 'conversationId', 'parentMessageId', 'senderId', 'senderName',
+               'senderRole', 'content', 'quotedSenderName', 'quotedPreview',
+               'mentionsSummary', 'reactionsSummary', 'edited', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'userId', 'conversationId', 'parentMessageId', 'senderId', 'senderName',
+               'senderRole', 'content', 'quotedSenderName', 'quotedPreview',
+               'mentionsSummary', 'reactionsSummary', 'edited', 'createdAt', 'updatedAt'
+             ]) &&
+             data.userId is string && data.userId == userId && data.userId == request.auth.uid &&
+             data.conversationId is string && data.conversationId == conversationId &&
+             data.parentMessageId is string && data.parentMessageId == messageId &&
+             data.senderId is string && data.senderId.size() >= 1 && data.senderId.size() <= 128 &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 80 &&
+             data.senderRole is string && data.senderRole.size() <= 32 &&
+             data.content is string && data.content.size() >= 1 && data.content.size() <= 2000 &&
+             data.quotedSenderName is string && data.quotedSenderName.size() <= 80 &&
+             data.quotedPreview is string && data.quotedPreview.size() <= 300 &&
+             data.mentionsSummary is string && data.mentionsSummary.size() <= 300 &&
+             data.reactionsSummary is string && data.reactionsSummary.size() <= 500 &&
+             data.edited is bool;
+    }
+
+    // 5. CommunityItem Validation Blueprint
+    function isValidCommunityItem(data, userId) {
+      return data.keys().hasAll([
+               'userId', 'name', 'handle', 'description', 'category', 'memberCount',
+               'unreadCount', 'joined', 'pendingInvite', 'publicAccess', 'inviteCode',
+               'linkedConversationId', 'avatarColor', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'userId', 'name', 'handle', 'description', 'category', 'memberCount',
+               'unreadCount', 'joined', 'pendingInvite', 'publicAccess', 'inviteCode',
+               'linkedConversationId', 'avatarColor', 'createdAt', 'updatedAt'
+             ]) &&
+             data.userId is string && data.userId == userId && data.userId == request.auth.uid &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+             data.handle is string && data.handle.size() >= 2 && data.handle.size() <= 40 &&
+             data.description is string && data.description.size() <= 500 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 40 &&
+             data.memberCount is int && data.memberCount >= 1 &&
+             data.unreadCount is int && data.unreadCount >= 0 &&
+             data.joined is bool &&
+             data.pendingInvite is bool &&
+             data.publicAccess is bool &&
+             data.inviteCode is string && data.inviteCode.size() >= 1 && data.inviteCode.size() <= 40 &&
+             data.linkedConversationId is string && data.linkedConversationId.size() <= 128 &&
+             data.avatarColor is string && data.avatarColor.size() >= 4 && data.avatarColor.size() <= 16;
+    }
+
+    // 6. ChannelItem Validation Blueprint
+    function isValidChannelItem(data, userId) {
+      return data.keys().hasAll([
+               'userId', 'name', 'handle', 'description', 'subscriberCount', 'subscribed',
+               'adminRole', 'latestAnnouncement', 'pinnedPostText', 'pollQuestion',
+               'pollOptionA', 'pollVotesA', 'pollOptionB', 'pollVotesB', 'pollOptionC',
+               'pollVotesC', 'userVotedOption', 'reactionsSummary', 'avatarColor',
+               'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'userId', 'name', 'handle', 'description', 'subscriberCount', 'subscribed',
+               'adminRole', 'latestAnnouncement', 'pinnedPostText', 'pollQuestion',
+               'pollOptionA', 'pollVotesA', 'pollOptionB', 'pollVotesB', 'pollOptionC',
+               'pollVotesC', 'userVotedOption', 'reactionsSummary', 'avatarColor',
+               'createdAt', 'updatedAt'
+             ]) &&
+             data.userId is string && data.userId == userId && data.userId == request.auth.uid &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+             data.handle is string && data.handle.size() >= 2 && data.handle.size() <= 40 &&
+             data.description is string && data.description.size() <= 500 &&
+             data.subscriberCount is int && data.subscriberCount >= 1 &&
+             data.subscribed is bool &&
+             data.adminRole is bool &&
+             data.latestAnnouncement is string && data.latestAnnouncement.size() >= 1 && data.latestAnnouncement.size() <= 1500 &&
+             data.pinnedPostText is string && data.pinnedPostText.size() <= 500 &&
+             data.pollQuestion is string && data.pollQuestion.size() <= 300 &&
+             data.pollOptionA is string && data.pollOptionA.size() <= 100 &&
+             data.pollVotesA is int && data.pollVotesA >= 0 &&
+             data.pollOptionB is string && data.pollOptionB.size() <= 100 &&
+             data.pollVotesB is int && data.pollVotesB >= 0 &&
+             data.pollOptionC is string && data.pollOptionC.size() <= 100 &&
+             data.pollVotesC is int && data.pollVotesC >= 0 &&
+             data.userVotedOption is string && data.userVotedOption.size() <= 16 &&
+             data.reactionsSummary is string && data.reactionsSummary.size() <= 500 &&
+             data.avatarColor is string && data.avatarColor.size() >= 4 && data.avatarColor.size() <= 16;
+    }
+
+    // 7. CallRecordItem Validation Blueprint
+    function isValidCallRecordItem(data, userId) {
+      return data.keys().hasAll([
+               'userId', 'conversationId', 'contactName', 'callType', 'direction',
+               'status', 'durationSeconds', 'avatarColor', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'userId', 'conversationId', 'contactName', 'callType', 'direction',
+               'status', 'durationSeconds', 'avatarColor', 'createdAt', 'updatedAt'
+             ]) &&
+             data.userId is string && data.userId == userId && data.userId == request.auth.uid &&
+             data.conversationId is string && data.conversationId.size() <= 128 &&
+             data.contactName is string && data.contactName.size() >= 1 && data.contactName.size() <= 80 &&
+             data.callType is string && data.callType in ['VOICE', 'VIDEO'] &&
+             data.direction is string && data.direction in ['INCOMING', 'OUTGOING', 'MISSED'] &&
+             data.status is string && data.status in ['RINGING', 'ACTIVE', 'ENDED', 'MISSED'] &&
+             data.durationSeconds is int && data.durationSeconds >= 0 &&
+             data.avatarColor is string && data.avatarColor.size() >= 4 && data.avatarColor.size() <= 16;
+    }
+
+    // 8. ModerationReportItem Validation Blueprint
+    function isValidModerationReportItem(data, userId) {
+      return data.keys().hasAll([
+               'userId', 'targetType', 'targetId', 'targetName', 'reason',
+               'details', 'status', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'userId', 'targetType', 'targetId', 'targetName', 'reason',
+               'details', 'status', 'createdAt', 'updatedAt'
+             ]) &&
+             data.userId is string && data.userId == userId && data.userId == request.auth.uid &&
+             data.targetType is string && data.targetType in ['USER', 'MESSAGE', 'GROUP', 'COMMUNITY'] &&
+             data.targetId is string && data.targetId.size() >= 1 && data.targetId.size() <= 128 &&
+             data.targetName is string && data.targetName.size() >= 1 && data.targetName.size() <= 100 &&
+             data.reason is string && data.reason.size() >= 1 && data.reason.size() <= 80 &&
+             data.details is string && data.details.size() <= 1000 &&
+             data.status is string && data.status in ['OPEN', 'REVIEWED'];
+    }
+
+    // =========================================================================
+    // COLLECTION MATCH RULES
+    // =========================================================================
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidUserProfile(incoming(), userId) &&
+                       hasValidTimestampsOnCreate(incoming());
+
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidUserProfile(incoming(), userId) &&
+                       hasValidTimestampsOnUpdate(incoming(), existing()) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'displayName', 'username', 'phoneNumber', 'countryCode', 'bio',
+                         'avatarColor', 'publicKeyBase64', 'keyFingerprint', 'deviceName',
+                         'onboardingCompleted', 'online', 'privacyOnline', 'privacyLastSeen',
+                         'privacyReadReceipts', 'privacyPhoneLookup', 'reducedMotion',
+                         'blockedUsersCsv', 'updatedAt'
+                       ]);
+
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      // Subcollection: Conversations
+      match /conversations/{conversationId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(conversationId) && existing().userId == request.auth.uid;
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(conversationId) &&
+                         isValidConversationItem(incoming(), userId) &&
+                         hasValidTimestampsOnCreate(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(conversationId) &&
+                         isValidConversationItem(incoming(), userId) &&
+                         hasValidTimestampsOnUpdate(incoming(), existing()) &&
+                         incoming().type == existing().type &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'title', 'subtitle', 'encryptionMode', 'memberCount', 'onlineCount',
+                           'lastMessagePreview', 'lastMessageSender', 'unreadCount', 'pinned',
+                           'muted', 'archived', 'topicsCsv', 'resourcesCsv', 'inviteCode',
+                           'avatarColor', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(conversationId) && existing().userId == request.auth.uid;
+
+        // Subcollection: Messages
+        match /messages/{messageId} {
+          allow get: if isOwner(userId) && isValidId(userId) && isValidId(conversationId) && isValidId(messageId) && existing().userId == request.auth.uid;
+          allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+          allow create: if isOwner(userId) &&
+                           isValidId(userId) &&
+                           isValidId(conversationId) &&
+                           isValidId(messageId) &&
+                           isValidChatMessage(incoming(), userId, conversationId) &&
+                           hasValidTimestampsOnCreate(incoming());
+
+          allow update: if isOwner(userId) &&
+                           isValidId(userId) &&
+                           isValidId(conversationId) &&
+                           isValidId(messageId) &&
+                           isValidChatMessage(incoming(), userId, conversationId) &&
+                           hasValidTimestampsOnUpdate(incoming(), existing()) &&
+                           incoming().senderId == existing().senderId &&
+                           incoming().diff(existing()).affectedKeys().hasOnly([
+                             'content', 'cipherText', 'ivBase64', 'attachmentMeta', 'replyCount',
+                             'lastReplyPreview', 'lastReplySender', 'followingThread',
+                             'threadMuted', 'unreadReplyCount', 'reactionsSummary', 'readCount',
+                             'readersCsv', 'pinned', 'edited', 'deleted', 'updatedAt'
+                           ]);
+
+          allow delete: if isOwner(userId) && isValidId(userId) && isValidId(conversationId) && isValidId(messageId) && existing().userId == request.auth.uid;
+
+          // Subcollection: Thread Replies
+          match /replies/{replyId} {
+            allow get: if isOwner(userId) && isValidId(userId) && isValidId(conversationId) && isValidId(messageId) && isValidId(replyId) && existing().userId == request.auth.uid;
+            allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+            allow create: if isOwner(userId) &&
+                             isValidId(userId) &&
+                             isValidId(conversationId) &&
+                             isValidId(messageId) &&
+                             isValidId(replyId) &&
+                             isValidThreadReplyItem(incoming(), userId, conversationId, messageId) &&
+                             hasValidTimestampsOnCreate(incoming());
+
+            allow update: if isOwner(userId) &&
+                             isValidId(userId) &&
+                             isValidId(conversationId) &&
+                             isValidId(messageId) &&
+                             isValidId(replyId) &&
+                             isValidThreadReplyItem(incoming(), userId, conversationId, messageId) &&
+                             hasValidTimestampsOnUpdate(incoming(), existing()) &&
+                             incoming().senderId == existing().senderId &&
+                             incoming().diff(existing()).affectedKeys().hasOnly([
+                               'content', 'reactionsSummary', 'edited', 'updatedAt'
+                             ]);
+
+            allow delete: if isOwner(userId) && isValidId(userId) && isValidId(conversationId) && isValidId(messageId) && isValidId(replyId) && existing().userId == request.auth.uid;
+          }
+        }
+      }
+
+      // Subcollection: Communities
+      match /communities/{communityId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(communityId) && existing().userId == request.auth.uid;
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(communityId) &&
+                         isValidCommunityItem(incoming(), userId) &&
+                         hasValidTimestampsOnCreate(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(communityId) &&
+                         isValidCommunityItem(incoming(), userId) &&
+                         hasValidTimestampsOnUpdate(incoming(), existing()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'name', 'description', 'category', 'memberCount', 'unreadCount',
+                           'joined', 'pendingInvite', 'publicAccess', 'linkedConversationId',
+                           'avatarColor', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(communityId) && existing().userId == request.auth.uid;
+      }
+
+      // Subcollection: Channels
+      match /channels/{channelId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(channelId) && existing().userId == request.auth.uid;
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(channelId) &&
+                         isValidChannelItem(incoming(), userId) &&
+                         hasValidTimestampsOnCreate(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(channelId) &&
+                         isValidChannelItem(incoming(), userId) &&
+                         hasValidTimestampsOnUpdate(incoming(), existing()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'description', 'subscriberCount', 'subscribed', 'latestAnnouncement',
+                           'pinnedPostText', 'pollQuestion', 'pollOptionA', 'pollVotesA',
+                           'pollOptionB', 'pollVotesB', 'pollOptionC', 'pollVotesC',
+                           'userVotedOption', 'reactionsSummary', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(channelId) && existing().userId == request.auth.uid;
+      }
+
+      // Subcollection: Calls
+      match /calls/{callId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(callId) && existing().userId == request.auth.uid;
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(callId) &&
+                         isValidCallRecordItem(incoming(), userId) &&
+                         hasValidTimestampsOnCreate(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(callId) &&
+                         isValidCallRecordItem(incoming(), userId) &&
+                         hasValidTimestampsOnUpdate(incoming(), existing()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'status', 'durationSeconds', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(callId) && existing().userId == request.auth.uid;
+      }
+
+      // Subcollection: Moderation Reports
+      match /reports/{reportId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(reportId) && existing().userId == request.auth.uid;
+        allow list: if isOwner(userId) && existing().userId == request.auth.uid;
+
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(reportId) &&
+                         isValidModerationReportItem(incoming(), userId) &&
+                         hasValidTimestampsOnCreate(incoming());
+
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(reportId) &&
+                         isValidModerationReportItem(incoming(), userId) &&
+                         hasValidTimestampsOnUpdate(incoming(), existing()) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'status', 'details', 'updatedAt'
+                         ]);
+
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(reportId) && existing().userId == request.auth.uid;
+      }
+    }
+  }
+}

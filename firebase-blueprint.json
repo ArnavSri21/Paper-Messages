@@ -1,0 +1,273 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account profile, E2EE public key metadata, and privacy preferences.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner Firebase Auth UID." },
+        "displayName": { "type": "string", "description": "Mandatory user display name." },
+        "username": { "type": "string", "description": "Unique lowercase handle." },
+        "phoneNumber": { "type": "string", "description": "Verified phone number." },
+        "countryCode": { "type": "string", "description": "Country dialing prefix." },
+        "bio": { "type": "string", "description": "User profile bio." },
+        "avatarColor": { "type": "string", "description": "Hex color token for avatar." },
+        "publicKeyBase64": { "type": "string", "description": "Base64-encoded ECDH P-256 public key." },
+        "keyFingerprint": { "type": "string", "description": "Formatted SHA-256 safety fingerprint." },
+        "deviceName": { "type": "string", "description": "Active Android device identifier." },
+        "onboardingCompleted": { "type": "boolean", "description": "Whether phone OTP and handle setup finished." },
+        "online": { "type": "boolean", "description": "Current online presence status." },
+        "privacyOnline": { "type": "string", "enum": ["EVERYONE", "CONTACTS", "NOBODY"] },
+        "privacyLastSeen": { "type": "string", "enum": ["EVERYONE", "CONTACTS", "NOBODY"] },
+        "privacyReadReceipts": { "type": "boolean", "description": "Whether read receipts are shared." },
+        "privacyPhoneLookup": { "type": "string", "enum": ["EVERYONE", "CONTACTS", "NOBODY"] },
+        "reducedMotion": { "type": "boolean", "description": "Accessibility reduced motion flag." },
+        "blockedUsersCsv": { "type": "string", "description": "Comma-separated blocked user IDs/names." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp on creation." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp on update." }
+      },
+      "required": [
+        "userId", "displayName", "username", "phoneNumber", "countryCode", "bio",
+        "avatarColor", "publicKeyBase64", "keyFingerprint", "deviceName",
+        "onboardingCompleted", "online", "privacyOnline", "privacyLastSeen",
+        "privacyReadReceipts", "privacyPhoneLookup", "reducedMotion", "blockedUsersCsv",
+        "createdAt", "updatedAt"
+      ]
+    },
+    "ConversationItem": {
+      "title": "ConversationItem",
+      "description": "Private 1:1 or threaded group conversation metadata.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "type": { "type": "string", "enum": ["PRIVATE", "GROUP"] },
+        "encryptionMode": { "type": "string", "enum": ["E2EE_SIGNAL", "E2EE_MLS", "TRANSPORT_TLS"] },
+        "memberCount": { "type": "integer" },
+        "onlineCount": { "type": "integer" },
+        "lastMessagePreview": { "type": "string" },
+        "lastMessageSender": { "type": "string" },
+        "unreadCount": { "type": "integer" },
+        "pinned": { "type": "boolean" },
+        "muted": { "type": "boolean" },
+        "archived": { "type": "boolean" },
+        "topicsCsv": { "type": "string" },
+        "resourcesCsv": { "type": "string" },
+        "inviteCode": { "type": "string" },
+        "avatarColor": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId", "title", "subtitle", "type", "encryptionMode", "memberCount",
+        "onlineCount", "lastMessagePreview", "lastMessageSender", "unreadCount",
+        "pinned", "muted", "archived", "topicsCsv", "resourcesCsv", "inviteCode",
+        "avatarColor", "createdAt", "updatedAt"
+      ]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Individual or group parent message with denormalized thread summary fields.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "conversationId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderRole": { "type": "string" },
+        "topic": { "type": "string" },
+        "content": { "type": "string" },
+        "cipherText": { "type": "string" },
+        "ivBase64": { "type": "string" },
+        "attachmentType": { "type": "string", "enum": ["NONE", "IMAGE", "VIDEO", "DOCUMENT", "VOICE", "POLL"] },
+        "attachmentName": { "type": "string" },
+        "attachmentMeta": { "type": "string" },
+        "replyCount": { "type": "integer" },
+        "lastReplyPreview": { "type": "string" },
+        "lastReplySender": { "type": "string" },
+        "followingThread": { "type": "boolean" },
+        "threadMuted": { "type": "boolean" },
+        "unreadReplyCount": { "type": "integer" },
+        "reactionsSummary": { "type": "string" },
+        "readCount": { "type": "integer" },
+        "readersCsv": { "type": "string" },
+        "pinned": { "type": "boolean" },
+        "edited": { "type": "boolean" },
+        "deleted": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId", "conversationId", "senderId", "senderName", "senderRole", "topic",
+        "content", "cipherText", "ivBase64", "attachmentType", "attachmentName",
+        "attachmentMeta", "replyCount", "lastReplyPreview", "lastReplySender",
+        "followingThread", "threadMuted", "unreadReplyCount", "reactionsSummary",
+        "readCount", "readersCsv", "pinned", "edited", "deleted", "createdAt", "updatedAt"
+      ]
+    },
+    "ThreadReplyItem": {
+      "title": "ThreadReplyItem",
+      "description": "Chronological reply within a group message thread.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "conversationId": { "type": "string" },
+        "parentMessageId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderRole": { "type": "string" },
+        "content": { "type": "string" },
+        "quotedSenderName": { "type": "string" },
+        "quotedPreview": { "type": "string" },
+        "mentionsSummary": { "type": "string" },
+        "reactionsSummary": { "type": "string" },
+        "edited": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId", "conversationId", "parentMessageId", "senderId", "senderName",
+        "senderRole", "content", "quotedSenderName", "quotedPreview",
+        "mentionsSummary", "reactionsSummary", "edited", "createdAt", "updatedAt"
+      ]
+    },
+    "CommunityItem": {
+      "title": "CommunityItem",
+      "description": "Public or private community with category discovery and invitations.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "handle": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "memberCount": { "type": "integer" },
+        "unreadCount": { "type": "integer" },
+        "joined": { "type": "boolean" },
+        "pendingInvite": { "type": "boolean" },
+        "publicAccess": { "type": "boolean" },
+        "inviteCode": { "type": "string" },
+        "linkedConversationId": { "type": "string" },
+        "avatarColor": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId", "name", "handle", "description", "category", "memberCount",
+        "unreadCount", "joined", "pendingInvite", "publicAccess", "inviteCode",
+        "linkedConversationId", "avatarColor", "createdAt", "updatedAt"
+      ]
+    },
+    "ChannelItem": {
+      "title": "ChannelItem",
+      "description": "Broadcast announcement channel with interactive polls and reactions.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "handle": { "type": "string" },
+        "description": { "type": "string" },
+        "subscriberCount": { "type": "integer" },
+        "subscribed": { "type": "boolean" },
+        "adminRole": { "type": "boolean" },
+        "latestAnnouncement": { "type": "string" },
+        "pinnedPostText": { "type": "string" },
+        "pollQuestion": { "type": "string" },
+        "pollOptionA": { "type": "string" },
+        "pollVotesA": { "type": "integer" },
+        "pollOptionB": { "type": "string" },
+        "pollVotesB": { "type": "integer" },
+        "pollOptionC": { "type": "string" },
+        "pollVotesC": { "type": "integer" },
+        "userVotedOption": { "type": "string" },
+        "reactionsSummary": { "type": "string" },
+        "avatarColor": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId", "name", "handle", "description", "subscriberCount", "subscribed",
+        "adminRole", "latestAnnouncement", "pinnedPostText", "pollQuestion",
+        "pollOptionA", "pollVotesA", "pollOptionB", "pollVotesB", "pollOptionC",
+        "pollVotesC", "userVotedOption", "reactionsSummary", "avatarColor",
+        "createdAt", "updatedAt"
+      ]
+    },
+    "CallRecordItem": {
+      "title": "CallRecordItem",
+      "description": "Voice and video call signaling and history log.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "conversationId": { "type": "string" },
+        "contactName": { "type": "string" },
+        "callType": { "type": "string", "enum": ["VOICE", "VIDEO"] },
+        "direction": { "type": "string", "enum": ["INCOMING", "OUTGOING", "MISSED"] },
+        "status": { "type": "string", "enum": ["RINGING", "ACTIVE", "ENDED", "MISSED"] },
+        "durationSeconds": { "type": "integer" },
+        "avatarColor": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId", "conversationId", "contactName", "callType", "direction",
+        "status", "durationSeconds", "avatarColor", "createdAt", "updatedAt"
+      ]
+    },
+    "ModerationReportItem": {
+      "title": "ModerationReportItem",
+      "description": "Abuse or spam report submitted for users, messages, or groups.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "targetType": { "type": "string", "enum": ["USER", "MESSAGE", "GROUP", "COMMUNITY"] },
+        "targetId": { "type": "string" },
+        "targetName": { "type": "string" },
+        "reason": { "type": "string" },
+        "details": { "type": "string" },
+        "status": { "type": "string", "enum": ["OPEN", "REVIEWED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "userId", "targetType", "targetId", "targetName", "reason",
+        "details", "status", "createdAt", "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile and privacy settings isolated to owner."
+    },
+    "/users/{userId}/conversations/{conversationId}": {
+      "schema": { "$ref": "#/entities/ConversationItem" },
+      "description": "Private 1:1 and threaded group conversations."
+    },
+    "/users/{userId}/conversations/{conversationId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Messages and parent thread anchors within a conversation."
+    },
+    "/users/{userId}/conversations/{conversationId}/messages/{messageId}/replies/{replyId}": {
+      "schema": { "$ref": "#/entities/ThreadReplyItem" },
+      "description": "Replies belonging to a parent message thread."
+    },
+    "/users/{userId}/communities/{communityId}": {
+      "schema": { "$ref": "#/entities/CommunityItem" },
+      "description": "Communities joined, discovered, or invited."
+    },
+    "/users/{userId}/channels/{channelId}": {
+      "schema": { "$ref": "#/entities/ChannelItem" },
+      "description": "Broadcast channels with announcements and polls."
+    },
+    "/users/{userId}/calls/{callId}": {
+      "schema": { "$ref": "#/entities/CallRecordItem" },
+      "description": "Voice and video call history and active call signaling records."
+    },
+    "/users/{userId}/reports/{reportId}": {
+      "schema": { "$ref": "#/entities/ModerationReportItem" },
+      "description": "Moderation and safety reports."
+    }
+  }
+}
