@@ -55,6 +55,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -108,17 +109,6 @@ fun AmbientLiquidBackground(
     content: @Composable BoxScope.() -> Unit
 ) {
     val themeConfig = LocalPaperThemeConfig.current
-    val infiniteTransition = rememberInfiniteTransition(label = "ambient_glow")
-    val driftProgress by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = if (themeConfig.reducedMotion) 0f else 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 11000, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "ambient_drift"
-    )
-
     val bgBase = if (themeConfig.darkTheme) PaperBgMain else MaterialTheme.colorScheme.background
     val accentPrimary = parseHexColor(themeConfig.accentHex, PaperAccentPrimary)
 
@@ -126,55 +116,53 @@ fun AmbientLiquidBackground(
         modifier = modifier
             .fillMaxSize()
             .background(bgBase)
-    ) {
-        if (themeConfig.darkTheme) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val width = size.width
-                val height = size.height
+            .let { baseMod ->
+                if (themeConfig.darkTheme) {
+                    baseMod.drawWithCache {
+                        val width = size.width
+                        val height = size.height
+                        val topLeftCenter = Offset(x = width * 0.18f, y = height * 0.14f)
+                        val topLeftRadius = (width * 0.78f).coerceAtLeast(1f)
+                        val topLeftBrush = Brush.radialGradient(
+                            colors = listOf(
+                                accentPrimary.copy(alpha = 0.14f),
+                                PaperAccentViolet.copy(alpha = 0.05f),
+                                Color.Transparent
+                            ),
+                            center = topLeftCenter,
+                            radius = topLeftRadius
+                        )
 
-                // Upper-left soft violet illumination
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            accentPrimary.copy(alpha = 0.14f),
-                            PaperAccentViolet.copy(alpha = 0.05f),
-                            Color.Transparent
-                        ),
-                        center = Offset(
-                            x = width * (0.15f + 0.08f * driftProgress),
-                            y = height * (0.12f + 0.05f * driftProgress)
-                        ),
-                        radius = width * 0.78f
-                    ),
-                    center = Offset(
-                        x = width * (0.15f + 0.08f * driftProgress),
-                        y = height * (0.12f + 0.05f * driftProgress)
-                    ),
-                    radius = width * 0.78f
-                )
+                        val bottomRightCenter = Offset(x = width * 0.82f, y = height * 0.82f)
+                        val bottomRightRadius = (width * 0.75f).coerceAtLeast(1f)
+                        val bottomRightBrush = Brush.radialGradient(
+                            colors = listOf(
+                                PaperAccentBlue.copy(alpha = 0.12f),
+                                PaperAccentSecondary.copy(alpha = 0.05f),
+                                Color.Transparent
+                            ),
+                            center = bottomRightCenter,
+                            radius = bottomRightRadius
+                        )
 
-                // Lower-right subtle cyan/blue illumination
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            PaperAccentBlue.copy(alpha = 0.12f),
-                            PaperAccentSecondary.copy(alpha = 0.05f),
-                            Color.Transparent
-                        ),
-                        center = Offset(
-                            x = width * (0.85f - 0.07f * driftProgress),
-                            y = height * (0.84f - 0.05f * driftProgress)
-                        ),
-                        radius = width * 0.75f
-                    ),
-                    center = Offset(
-                        x = width * (0.85f - 0.07f * driftProgress),
-                        y = height * (0.84f - 0.05f * driftProgress)
-                    ),
-                    radius = width * 0.75f
-                )
+                        onDrawBehind {
+                            drawCircle(
+                                brush = topLeftBrush,
+                                center = topLeftCenter,
+                                radius = topLeftRadius
+                            )
+                            drawCircle(
+                                brush = bottomRightBrush,
+                                center = bottomRightCenter,
+                                radius = bottomRightRadius
+                            )
+                        }
+                    }
+                } else {
+                    baseMod
+                }
             }
-        }
+    ) {
         content()
     }
 }

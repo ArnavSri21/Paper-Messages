@@ -122,6 +122,7 @@ fun CallsTabScreen(
     onStartCall: (conversationId: String, contactName: String, avatarColor: String, isVideo: Boolean) -> Unit
 ) {
     var selectedFilter by remember { mutableStateOf("ALL") } // ALL, INCOMING, OUTGOING, MISSED
+    var showNewCallDialog by remember { mutableStateOf(false) }
 
     val filteredCalls = remember(calls, selectedFilter) {
         if (selectedFilter == "ALL") {
@@ -161,9 +162,7 @@ fun CallsTabScreen(
                 LiquidGlassButton(
                     text = "New Call",
                     icon = Icons.Default.Call,
-                    onClick = {
-                        onStartCall("conv_private_elena", "Elena Rostova", "#54D6E8", false)
-                    },
+                    onClick = { showNewCallDialog = true },
                     testTag = "start_quick_call_button"
                 )
             }
@@ -194,17 +193,110 @@ fun CallsTabScreen(
             }
         }
 
-        items(filteredCalls, key = { it.id }) { call ->
-            CallHistoryCard(
-                call = call,
-                onVoiceRedial = {
-                    onStartCall(call.conversationId, call.contactName, call.avatarColor, false)
-                },
-                onVideoRedial = {
-                    onStartCall(call.conversationId, call.contactName, call.avatarColor, true)
+        if (filteredCalls.isEmpty()) {
+            item {
+                LiquidGlassSurface(
+                    intensity = GlassIntensity.LEVEL_2_STANDARD,
+                    shape = RoundedCornerShape(22.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 20.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Call,
+                            contentDescription = null,
+                            tint = PaperAccentSecondary,
+                            modifier = Modifier.size(34.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "No call history yet",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = PaperTextPrimary
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Start an end-to-end encrypted voice or video call from any conversation or tap 'New Call' above.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = PaperTextSecondary
+                        )
+                    }
                 }
-            )
+            }
+        } else {
+            items(filteredCalls, key = { it.id }) { call ->
+                CallHistoryCard(
+                    call = call,
+                    onVoiceRedial = {
+                        onStartCall(call.conversationId, call.contactName, call.avatarColor, false)
+                    },
+                    onVideoRedial = {
+                        onStartCall(call.conversationId, call.contactName, call.avatarColor, true)
+                    }
+                )
+            }
         }
+    }
+
+    if (showNewCallDialog) {
+        var recipientInput by remember { mutableStateOf("") }
+        var isVideoCall by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { showNewCallDialog = false },
+            containerColor = PaperSurfaceElevated,
+            titleContentColor = PaperTextPrimary,
+            textContentColor = PaperTextSecondary,
+            title = { Text("Start Encrypted Call") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = recipientInput,
+                        onValueChange = { recipientInput = it },
+                        label = { Text("Recipient Name or @username") },
+                        singleLine = true,
+                        colors = paperTextFieldColors(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Video Call (CameraX Preview)", color = PaperTextPrimary)
+                        Switch(checked = isVideoCall, onCheckedChange = { isVideoCall = it })
+                    }
+                }
+            },
+            confirmButton = {
+                LiquidGlassButton(
+                    text = if (isVideoCall) "Start Video Call" else "Start Voice Call",
+                    icon = if (isVideoCall) Icons.Default.Videocam else Icons.Default.Call,
+                    enabled = recipientInput.isNotBlank(),
+                    onClick = {
+                        val cleanRecipient = recipientInput.trim()
+                        showNewCallDialog = false
+                        onStartCall(
+                            "call_${cleanRecipient.lowercase().replace(Regex("[^a-z0-9]"), "_")}",
+                            cleanRecipient,
+                            "#8B7CFF",
+                            isVideoCall
+                        )
+                    }
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { showNewCallDialog = false }) {
+                    Text("Cancel", color = PaperTextSecondary)
+                }
+            }
+        )
     }
 }
 
@@ -563,6 +655,7 @@ private fun CallControlButton(
 @Composable
 fun ProfileAndSettingsScreen(
     currentUserId: String,
+    initialDisplayName: String = "",
     userProfile: UserProfile?,
     darkTheme: Boolean,
     accentHex: String,
@@ -585,11 +678,20 @@ fun ProfileAndSettingsScreen(
     var showEditDialog by remember { mutableStateOf(false) }
     var showBlockDialog by remember { mutableStateOf(false) }
 
-    val displayName = userProfile?.displayName?.ifBlank { "Alex Mercer" } ?: "Alex Mercer"
-    val username = userProfile?.username?.ifBlank { "alex_mercer" } ?: "alex_mercer"
+    val fallbackName = initialDisplayName.ifBlank { "Paper User" }
+    val displayName = userProfile?.displayName?.ifBlank { fallbackName } ?: fallbackName
+    val defaultHandle = remember(fallbackName, currentUserId) {
+        fallbackName.lowercase().replace(Regex("[^a-z0-9]"), "_").trim('_').takeIf { it.length >= 3 }
+            ?: "user_${currentUserId.take(6).lowercase()}"
+    }
+    val username = userProfile?.username?.ifBlank { defaultHandle } ?: defaultHandle
     val bio = userProfile?.bio?.ifBlank { "Conversations deserve structure, space and clarity." }
         ?: "Conversations deserve structure, space and clarity."
-    val phone = "${userProfile?.countryCode ?: "+1"} ${userProfile?.phoneNumber?.ifBlank { "5550192834" } ?: "5550192834"}"
+    val phone = if (!userProfile?.phoneNumber.isNullOrBlank()) {
+        "${userProfile?.countryCode ?: "+1"} ${userProfile?.phoneNumber}"
+    } else {
+        "No phone number linked"
+    }
     val keyFingerprint = userProfile?.keyFingerprint?.ifBlank {
         CryptoEngine.computeSafetyFingerprint(currentUserId)
     } ?: CryptoEngine.computeSafetyFingerprint(currentUserId)

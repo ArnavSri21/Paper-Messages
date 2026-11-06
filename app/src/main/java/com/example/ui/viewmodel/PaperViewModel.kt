@@ -15,6 +15,7 @@ import com.example.data.repository.PaperRepository
 import com.example.security.CryptoEngine
 import com.google.firebase.firestore.FirebaseFirestoreException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -144,11 +145,14 @@ class PaperViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000L), emptyList())
 
     init {
-        viewModelScope.launch {
-            repository.ensureStarterWorkspaceSeeded(initialDisplayName.ifBlank { "You" })
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.purgeLegacySeededData(initialDisplayName)
+            listOf("conv_paper_arch", "conv_private_elena", "conv_crypto_guild").forEach { seededId ->
+                searchDao?.deleteConversationIndex(currentUserId, seededId)
+            }
         }
         // Index active messages in local Room FTS cache whenever they update
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             activeMessages.collect { msgs ->
                 val convId = _activeConversationId.value ?: return@collect
                 val convTitle = conversations.value.find { it.id == convId }?.title ?: "Conversation"
@@ -194,7 +198,7 @@ class PaperViewModel(
 
     fun updateSearchQuery(query: String) {
         _searchQuery.value = query
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             if (query.trim().length >= 2 && searchDao != null) {
                 _localIndexedResults.value = searchDao.searchDecryptedMessages(currentUserId, query.trim())
             } else {
@@ -261,7 +265,6 @@ class PaperViewModel(
                 bio = bio,
                 onboardingCompleted = true
             ).onSuccess {
-                repository.ensureStarterWorkspaceSeeded(displayName)
                 showStatus("Profile verified & E2EE identity keys generated")
             }.onFailure {
                 showStatus(it.localizedMessage ?: "Failed to save profile")
@@ -284,7 +287,7 @@ class PaperViewModel(
             repository.upsertUserProfile(
                 displayName = displayName,
                 username = username,
-                phoneNumber = current?.phoneNumber ?: "+15550100",
+                phoneNumber = current?.phoneNumber ?: "",
                 countryCode = current?.countryCode ?: "+1",
                 bio = bio,
                 avatarColor = current?.avatarColor ?: _accentHex.value,
@@ -358,7 +361,7 @@ class PaperViewModel(
         } else {
             createNewConversation(
                 title = "Invited Group ($clean)",
-                subtitle = "18 members · Joined via Invite Link",
+                subtitle = "1 member · Joined via Invite Link",
                 type = "GROUP"
             )
             showStatus("Joined group via invite code $clean")
@@ -396,6 +399,7 @@ class PaperViewModel(
                 closeConversation()
             }
             repository.deleteConversation(conv.id)
+            searchDao?.deleteConversationIndex(currentUserId, conv.id)
             showStatus("Deleted ${conv.title}")
         }
     }
@@ -601,6 +605,32 @@ class PaperViewModel(
         viewModelScope.launch {
             repository.postChannelAnnouncement(channel, text).onSuccess {
                 showStatus("Broadcast posted to ${channel.name}")
+            }
+        }
+    }
+
+    fun createNewChannel(
+        name: String,
+        handle: String,
+        description: String,
+        announcement: String,
+        pollQuestion: String = "",
+        pollOptionA: String = "",
+        pollOptionB: String = "",
+        pollOptionC: String = ""
+    ) {
+        viewModelScope.launch {
+            repository.createChannel(
+                name = name,
+                handle = handle,
+                description = description,
+                announcement = announcement,
+                pollQuestion = pollQuestion,
+                pollOptionA = pollOptionA,
+                pollOptionB = pollOptionB,
+                pollOptionC = pollOptionC
+            ).onSuccess {
+                showStatus("Broadcast channel '$name' created")
             }
         }
     }

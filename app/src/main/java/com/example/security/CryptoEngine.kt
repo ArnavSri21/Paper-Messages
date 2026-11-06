@@ -30,12 +30,14 @@ object CryptoEngine {
     private const val GCM_IV_LENGTH_BYTES = 12
     private const val GCM_TAG_LENGTH_BITS = 128
 
-    // In-memory fallback keypair for JVM Robolectric unit tests where AndroidKeyStore is absent
-    private val jvmFallbackKeys = mutableMapOf<String, KeyPair>()
+    // Thread-safe caches to avoid repeated AndroidKeyStore IPC and ECDH derivation on the UI thread
+    private val keyPairCache = java.util.concurrent.ConcurrentHashMap<String, KeyPair>()
+    private val derivedKeyCache = java.util.concurrent.ConcurrentHashMap<String, SecretKeySpec>()
 
     fun getOrCreateIdentityKeyPair(userId: String): KeyPair {
         val alias = "$KEY_ALIAS_PREFIX$userId"
-        return try {
+        keyPairCache[alias]?.let { return it }
+        val resolved = try {
             val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
             val existingEntry = keyStore.getEntry(alias, null) as? KeyStore.PrivateKeyEntry
             if (existingEntry != null) {
@@ -56,23 +58,24 @@ object CryptoEngine {
                 generator.generateKeyPair()
             }
         } catch (_: Exception) {
-            jvmFallbackKeys.getOrPut(alias) {
-                val kpg = KeyPairGenerator.getInstance("EC")
-                kpg.initialize(ECGenParameterSpec("secp256r1"))
-                kpg.generateKeyPair()
-            }
+            val kpg = KeyPairGenerator.getInstance("EC")
+            kpg.initialize(ECGenParameterSpec("secp256r1"))
+            kpg.generateKeyPair()
         }
+        keyPairCache[alias] = resolved
+        return resolved
     }
 
     fun rotateIdentityKeyPair(userId: String): KeyPair {
         val alias = "$KEY_ALIAS_PREFIX$userId"
+        keyPairCache.remove(alias)
+        derivedKeyCache.keys.removeIf { it.startsWith("$userId:") }
         try {
             val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
             if (keyStore.containsAlias(alias)) {
                 keyStore.deleteEntry(alias)
             }
         } catch (_: Exception) {
-            jvmFallbackKeys.remove(alias)
         }
         return getOrCreateIdentityKeyPair(userId)
     }
@@ -97,6 +100,9 @@ object CryptoEngine {
     }
 
     fun deriveConversationKey(userId: String, conversationId: String, peerPublicKeyBase64: String? = null): SecretKeySpec {
+        val cacheKey = "$userId:$conversationId:${peerPublicKeyBase64.orEmpty()}"
+        derivedKeyCache[cacheKey]?.let { return it }
+
         val keyPair = getOrCreateIdentityKeyPair(userId)
         val rawShared = try {
             val peerPub: PublicKey = if (!peerPublicKeyBase64.isNullOrBlank()) {
@@ -117,7 +123,9 @@ object CryptoEngine {
         hkdf.update(rawShared)
         hkdf.update(conversationId.toByteArray(Charsets.UTF_8))
         val derivedKey = hkdf.digest()
-        return SecretKeySpec(derivedKey, "AES")
+        return SecretKeySpec(derivedKey, "AES").also {
+            derivedKeyCache[cacheKey] = it
+        }
     }
 
     fun encryptMessage(

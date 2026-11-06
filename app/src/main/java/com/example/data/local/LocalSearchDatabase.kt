@@ -47,6 +47,9 @@ interface LocalSearchDao {
 
     @Query("DELETE FROM local_message_search_index WHERE userId = :userId")
     suspend fun clearUserIndex(userId: String)
+
+    @Query("DELETE FROM local_message_search_index WHERE userId = :userId AND conversationId = :conversationId")
+    suspend fun deleteConversationIndex(userId: String, conversationId: String)
 }
 
 @Database(entities = [LocalIndexedMessage::class], version = 1, exportSchema = false)

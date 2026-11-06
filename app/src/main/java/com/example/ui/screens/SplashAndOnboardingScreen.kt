@@ -290,14 +290,17 @@ fun OnboardingAndAuthScreen(
     var isLoading by remember { mutableStateOf(false) }
     var authError by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(Unit) {
-        attemptAutoSignIn(
-            context = context,
-            credentialManager = credentialManager,
-            onAuthSuccess = onAuthSuccess,
-            onUnauthenticated = {},
-            scope = scope
-        )
+    LaunchedEffect(showOnboarding) {
+        if (!showOnboarding) {
+            delay(300L)
+            attemptAutoSignIn(
+                context = context,
+                credentialManager = credentialManager,
+                onAuthSuccess = onAuthSuccess,
+                onUnauthenticated = {},
+                scope = scope
+            )
+        }
     }
 
     val pages = remember {
@@ -618,17 +621,17 @@ fun PhoneAndOtpSetupScreen(
     }
     var selectedCountry by remember { mutableStateOf(countryCodes.first()) }
     var countryMenuExpanded by remember { mutableStateOf(false) }
-    var phoneNumber by remember { mutableStateOf("5550192834") }
-    var displayName by remember { mutableStateOf(initialName.ifBlank { "Alex Mercer" }) }
+    var phoneNumber by remember { mutableStateOf("") }
+    var displayName by remember { mutableStateOf(initialName) }
     var username by remember {
         mutableStateOf(
-            initialName.lowercase().replace(Regex("[^a-z0-9]"), "_").take(16).ifBlank { "alex_mercer" }
+            initialName.lowercase().replace(Regex("[^a-z0-9]"), "_").trim('_').take(16)
         )
     }
-    var bio by remember { mutableStateOf("Building focused conversations on PaperMessages.") }
+    var bio by remember { mutableStateOf("") }
 
     var stepOtp by remember { mutableStateOf(false) }
-    var otpCode by remember { mutableStateOf("482910") }
+    var otpCode by remember { mutableStateOf("") }
     var countdown by remember { mutableIntStateOf(30) }
 
     LaunchedEffect(stepOtp) {

@@ -74,7 +74,6 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun PaperMessagesRootApp() {
-    var splashCompleted by rememberSaveable { mutableStateOf(false) }
     var currentUser by remember { mutableStateOf(Firebase.auth.currentUser) }
 
     DisposableEffect(Unit) {
@@ -87,13 +86,6 @@ fun PaperMessagesRootApp() {
         }
     }
 
-    if (!splashCompleted) {
-        PaperMessagesTheme {
-            AnimatedSplashScreen(onFinished = { splashCompleted = true })
-        }
-        return
-    }
-
     val user = currentUser
     if (user == null) {
         // Strict Auth Gate: Never instantiate Firestore repositories or ViewModels while unauthenticated
@@ -103,9 +95,12 @@ fun PaperMessagesRootApp() {
             )
         }
     } else {
+        val resolvedName = user.displayName?.takeIf { it.isNotBlank() }
+            ?: user.email?.substringBefore("@")?.takeIf { it.isNotBlank() }
+            ?: ""
         AuthenticatedPaperMessagesApp(
             currentUserId = user.uid,
-            initialDisplayName = user.displayName ?: "Alex Mercer",
+            initialDisplayName = resolvedName,
             onSignedOut = { currentUser = null }
         )
     }
@@ -300,6 +295,9 @@ fun AuthenticatedPaperMessagesApp(
                             onCreateCommunity = { name, handle, desc, cat, isPublic ->
                                 viewModel.createNewCommunity(name, handle, desc, cat, isPublic)
                             },
+                            onCreateChannel = { name, handle, desc, announce, pollQ, optA, optB, optC ->
+                                viewModel.createNewChannel(name, handle, desc, announce, pollQ, optA, optB, optC)
+                            },
                             onVoteChannelPoll = { chan, opt -> viewModel.voteInChannelPoll(chan, opt) },
                             onPostChannelAnnouncement = { chan, text ->
                                 viewModel.postChannelAnnouncement(chan, text)
@@ -319,6 +317,7 @@ fun AuthenticatedPaperMessagesApp(
                     MainNavSection.PROFILE -> {
                         ProfileAndSettingsScreen(
                             currentUserId = currentUserId,
+                            initialDisplayName = initialDisplayName,
                             userProfile = userProfile,
                             darkTheme = darkTheme,
                             accentHex = accentHex,

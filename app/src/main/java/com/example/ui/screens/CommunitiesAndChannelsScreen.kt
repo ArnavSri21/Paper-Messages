@@ -75,12 +75,14 @@ fun CommunitiesAndChannelsScreen(
     onOpenLinkedConversation: (String) -> Unit,
     onToggleJoinCommunity: (CommunityItem) -> Unit,
     onCreateCommunity: (name: String, handle: String, description: String, category: String, isPublic: Boolean) -> Unit,
+    onCreateChannel: (name: String, handle: String, description: String, announcement: String, pollQuestion: String, pollOptA: String, pollOptB: String, pollOptC: String) -> Unit = { _, _, _, _, _, _, _, _ -> },
     onVoteChannelPoll: (ChannelItem, String) -> Unit,
     onPostChannelAnnouncement: (ChannelItem, String) -> Unit
 ) {
     var activeSubTab by remember { mutableStateOf("COMMUNITIES") } // COMMUNITIES or CHANNELS
     var selectedCategory by remember { mutableStateOf("All") }
     var showCreateCommunityDialog by remember { mutableStateOf(false) }
+    var showCreateChannelDialog by remember { mutableStateOf(false) }
     var channelForPostDialog by remember { mutableStateOf<ChannelItem?>(null) }
 
     val categories = remember { listOf("All", "Technology", "Security", "Design", "Startups") }
@@ -132,7 +134,13 @@ fun CommunitiesAndChannelsScreen(
                 LiquidGlassButton(
                     text = "Create",
                     icon = Icons.Default.Add,
-                    onClick = { showCreateCommunityDialog = true },
+                    onClick = {
+                        if (activeSubTab == "COMMUNITIES") {
+                            showCreateCommunityDialog = true
+                        } else {
+                            showCreateChannelDialog = true
+                        }
+                    },
                     testTag = "create_community_button"
                 )
             }
@@ -282,25 +290,101 @@ fun CommunitiesAndChannelsScreen(
                 }
             }
 
-            items(discoverCommunities, key = { "disc_${it.id}" }) { comm ->
-                CommunityDiscoveryCard(
-                    community = comm,
-                    onOpenSpace = {
-                        if (comm.linkedConversationId.isNotBlank()) {
-                            onOpenLinkedConversation(comm.linkedConversationId)
+            if (discoverCommunities.isEmpty()) {
+                item {
+                    LiquidGlassSurface(
+                        intensity = GlassIntensity.LEVEL_2_STANDARD,
+                        shape = RoundedCornerShape(22.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Groups,
+                                contentDescription = null,
+                                tint = PaperAccentSecondary,
+                                modifier = Modifier.size(34.dp)
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "No communities yet",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = PaperTextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Create your first public or private community with structured multi-topic discussions.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = PaperTextSecondary
+                            )
                         }
-                    },
-                    onToggleJoin = { onToggleJoinCommunity(comm) }
-                )
+                    }
+                }
+            } else {
+                items(discoverCommunities, key = { "disc_${it.id}" }) { comm ->
+                    CommunityDiscoveryCard(
+                        community = comm,
+                        onOpenSpace = {
+                            if (comm.linkedConversationId.isNotBlank()) {
+                                onOpenLinkedConversation(comm.linkedConversationId)
+                            }
+                        },
+                        onToggleJoin = { onToggleJoinCommunity(comm) }
+                    )
+                }
             }
         } else {
             // CHANNELS SCREEN (Part 5.7)
-            items(channels, key = { it.id }) { channel ->
-                BroadcastChannelCard(
-                    channel = channel,
-                    onVoteOption = { opt -> onVoteChannelPoll(channel, opt) },
-                    onPostAnnouncement = { channelForPostDialog = channel }
-                )
+            if (channels.isEmpty()) {
+                item {
+                    LiquidGlassSurface(
+                        intensity = GlassIntensity.LEVEL_2_STANDARD,
+                        shape = RoundedCornerShape(22.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Campaign,
+                                contentDescription = null,
+                                tint = PaperAccentSecondary,
+                                modifier = Modifier.size(34.dp)
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "No broadcast channels yet",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = PaperTextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Tap 'Create' above to launch a broadcast channel for announcements and live polls.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = PaperTextSecondary
+                            )
+                        }
+                    }
+                }
+            } else {
+                items(channels, key = { it.id }) { channel ->
+                    BroadcastChannelCard(
+                        channel = channel,
+                        onVoteOption = { opt -> onVoteChannelPoll(channel, opt) },
+                        onPostAnnouncement = { channelForPostDialog = channel }
+                    )
+                }
             }
         }
     }
@@ -415,6 +499,109 @@ fun CommunitiesAndChannelsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { channelForPostDialog = null }) {
+                    Text("Cancel", color = PaperTextSecondary)
+                }
+            }
+        )
+    }
+
+    // Create Broadcast Channel Dialog
+    if (showCreateChannelDialog) {
+        var name by remember { mutableStateOf("") }
+        var handle by remember { mutableStateOf("") }
+        var description by remember { mutableStateOf("") }
+        var announcement by remember { mutableStateOf("") }
+        var pollQuestion by remember { mutableStateOf("") }
+        var pollOptA by remember { mutableStateOf("") }
+        var pollOptB by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showCreateChannelDialog = false },
+            containerColor = PaperSurfaceElevated,
+            titleContentColor = PaperTextPrimary,
+            textContentColor = PaperTextSecondary,
+            title = { Text("Create Broadcast Channel") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = {
+                            name = it
+                            if (handle.isBlank()) {
+                                handle = it.lowercase().replace(Regex("[^a-z0-9]"), "_").take(24)
+                            }
+                        },
+                        label = { Text("Channel Name") },
+                        singleLine = true,
+                        colors = paperTextFieldColors(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = handle,
+                        onValueChange = { handle = it.lowercase().replace(Regex("[^a-z0-9_]"), "").take(30) },
+                        label = { Text("Channel Handle") },
+                        prefix = { Text("@") },
+                        singleLine = true,
+                        colors = paperTextFieldColors(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = announcement,
+                        onValueChange = { announcement = it },
+                        label = { Text("Initial Broadcast Announcement") },
+                        maxLines = 3,
+                        colors = paperTextFieldColors(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = pollQuestion,
+                        onValueChange = { pollQuestion = it },
+                        label = { Text("Optional Poll Question") },
+                        singleLine = true,
+                        colors = paperTextFieldColors(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (pollQuestion.isNotBlank()) {
+                        OutlinedTextField(
+                            value = pollOptA,
+                            onValueChange = { pollOptA = it },
+                            label = { Text("Poll Option A") },
+                            singleLine = true,
+                            colors = paperTextFieldColors(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = pollOptB,
+                            onValueChange = { pollOptB = it },
+                            label = { Text("Poll Option B") },
+                            singleLine = true,
+                            colors = paperTextFieldColors(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                LiquidGlassButton(
+                    text = "Launch Channel",
+                    enabled = name.isNotBlank(),
+                    onClick = {
+                        showCreateChannelDialog = false
+                        onCreateChannel(
+                            name,
+                            handle,
+                            description.ifBlank { announcement },
+                            announcement,
+                            pollQuestion,
+                            pollOptA.ifBlank { "Yes" },
+                            pollOptB.ifBlank { "No" },
+                            ""
+                        )
+                    }
+                )
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateChannelDialog = false }) {
                     Text("Cancel", color = PaperTextSecondary)
                 }
             }
